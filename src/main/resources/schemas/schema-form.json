@@ -3,6 +3,24 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
+        "AttributeQueueID": {
+            "title": "Attribute Queue ID",
+            "description": "Enter the attribute name used for setting Queue ID",
+            "type": "string",
+            "default": "subscription-id"
+        },
+        "CreateQueue": {
+            "title": "Option to create queue with name defined in Attribute Queue ID",
+            "description": "Choose to create this queue or not",
+            "type": "boolean",
+            "default": true
+        },
+        "ConsumeQueue": {
+            "title": "Option to consume queue with name defined in Attribute Queue ID",
+            "description": "Choose to consume this queue or not",
+            "type": "boolean",
+            "default": true
+        },
         "RabbitMQHost": {
             "title": "RabbitMQ Host",
             "description": "Enter address of RabbitMQ",
@@ -58,5 +76,5 @@
             "default": true
         }
     },
-    "required": ["RabbitMQHost", "RabbitMQPort", "RabbitMQUsername", "RabbitMQPassword", "RabbitMQTimeout"]
+    "required": ["AttributeQueueID","CreateQueue","ConsumeQueue","RabbitMQHost", "RabbitMQPort", "RabbitMQUsername", "RabbitMQPassword", "RabbitMQTimeout","RabbitMQQueueDurable","RabbitMQQueueExclusive","RabbitMQQueueAutoDelete"]
 }

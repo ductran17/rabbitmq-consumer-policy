@@ -24,6 +24,15 @@ import lombok.Setter;
 @Setter
 public class RabbitMQConfiguration implements PolicyConfiguration {
 
+    @JsonProperty("AttributeQueueID")
+    private String attributeQueueID;
+
+    @JsonProperty("CreateQueue")
+    private Boolean createQueue;
+
+    @JsonProperty("ConsumeQueue")
+    private Boolean consumeQueue;
+
     @JsonProperty("RabbitMQHost")
     private String host;
 

@@ -31,6 +31,24 @@ You can configure the policy with the following options:
 ^| Type
 ^| Default
 
+.^|AttributeQueueID
+^.^|X
+.^|Attribute name used for setting Queue ID
+^.^|string
+^.^|"subscription-id"
+
+.^|CreateQueue
+^.^|X
+.^|(Recommend to keep default value) Option to create queue with name defined in Attribute Queue ID
+^.^|boolean
+^.^|true
+
+.^|ConsumeQueue
+^.^|X
+.^|(Recommend to keep default value) Option to consume queue with name defined in Attribute Queue ID
+^.^|boolean
+^.^|true
+
 .^|RabbitMQ Host
 ^.^|X
 .^|Address of RabbitMQ broker

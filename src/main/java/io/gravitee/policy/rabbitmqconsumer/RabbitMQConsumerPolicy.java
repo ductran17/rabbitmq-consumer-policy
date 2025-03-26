@@ -36,6 +36,9 @@ public class RabbitMQConsumerPolicy implements Policy {
     private final ConnectionFactory factory;
     private Integer timeOut;
     Map<String, Boolean> queueConfig = new HashMap<>();
+    private String attributeQueueID;
+    private Boolean createQueue;
+    private Boolean consumeQueue;
 
     public RabbitMQConsumerPolicy(RabbitMQConfiguration configuration) {
         this.configuration = configuration;
@@ -46,7 +49,10 @@ public class RabbitMQConsumerPolicy implements Policy {
         factory.setPassword(configuration.getPassword());
         factory.setVirtualHost("/");
         factory.setConnectionTimeout(5000);
+        this.attributeQueueID = configuration.getAttributeQueueID();
         this.timeOut = configuration.getTimeout();
+        this.createQueue = configuration.getCreateQueue();
+        this.consumeQueue = configuration.getConsumeQueue();
         this.queueConfig =
             Map.of(
                 "durable",
@@ -71,7 +77,7 @@ public class RabbitMQConsumerPolicy implements Policy {
     @Override
     public Completable onResponse(HttpExecutionContext ctx) {
         return Completable.create(emitter -> {
-            String subscriptionId = ctx.getAttribute("subscription-id");
+            String subscriptionId = ctx.getAttribute(this.attributeQueueID);
             if (subscriptionId == null) {
                 emitter.onError(new IllegalArgumentException("Subscription ID not found in context"));
                 return;
@@ -81,41 +87,45 @@ public class RabbitMQConsumerPolicy implements Policy {
                 Connection connection = factory.newConnection();
                 Channel channel = connection.createChannel();
 
-                try {
-                    // Use queueDeclare to make sure queue exist (will create if queue not exist
-                    channel.queueDeclare(
-                        subscriptionId,
-                        queueConfig.get("durable"), // durable
-                        queueConfig.get("exclusive"), // exclusive
-                        queueConfig.get("autoDelete"), // autoDelete
-                        Map.of("x-expires", this.timeOut)
-                    );
-                } catch (IOException e) {
-                    emitter.onError(
-                        new RuntimeException("Queue declaration failed. Possibly due to mismatched parameters.", e)
-                    );
-                    return;
+                if (this.createQueue) {
+                    try {
+                        // Use queueDeclare to make sure queue exist (will create if queue not exist
+                        channel.queueDeclare(
+                            subscriptionId,
+                            queueConfig.get("durable"), // durable
+                            queueConfig.get("exclusive"), // exclusive
+                            queueConfig.get("autoDelete"), // autoDelete
+                            Map.of("x-expires", this.timeOut)
+                        );
+                    } catch (IOException e) {
+                        emitter.onError(
+                            new RuntimeException("Queue declaration failed. Possibly due to mismatched parameters.", e)
+                        );
+                        return;
+                    }
                 }
 
                 // Consume messages and stop after receiving the first one
-                channel.basicConsume(
-                    subscriptionId,
-                    true,
-                    (consumerTag, delivery) -> {
-                        try {
-                            String message = new String(delivery.getBody(), StandardCharsets.UTF_8);
-                            ctx.response().headers().set("Content-Type", "text/plain");
-                            ctx.response().body(Buffer.buffer(message));
-                            ctx.response().end(ctx);
-                            channel.close();
-                            connection.close();
-                            emitter.onComplete();
-                        } catch (Exception e) {
-                            emitter.onError(e);
-                        }
-                    },
-                    consumerTag -> {}
-                );
+                if (this.consumeQueue) {
+                    channel.basicConsume(
+                        subscriptionId,
+                        true,
+                        (consumerTag, delivery) -> {
+                            try {
+                                String message = new String(delivery.getBody(), StandardCharsets.UTF_8);
+                                ctx.response().headers().set("Content-Type", "text/plain");
+                                ctx.response().body(Buffer.buffer(message));
+                                ctx.response().end(ctx);
+                                channel.close();
+                                connection.close();
+                                emitter.onComplete();
+                            } catch (Exception e) {
+                                emitter.onError(e);
+                            }
+                        },
+                        consumerTag -> {}
+                    );
+                }
             } catch (Exception e) {
                 emitter.onError(e);
             }
