@@ -76,5 +76,17 @@
             "default": true
         }
     },
-    "required": ["AttributeQueueID","CreateQueue","ConsumeQueue","RabbitMQHost", "RabbitMQPort", "RabbitMQUsername", "RabbitMQPassword", "RabbitMQTimeout","RabbitMQQueueDurable","RabbitMQQueueExclusive","RabbitMQQueueAutoDelete"]
+    "required": [
+        "AttributeQueueID",
+        "CreateQueue",
+        "ConsumeQueue",
+        "RabbitMQHost",
+        "RabbitMQPort",
+        "RabbitMQUsername",
+        "RabbitMQPassword",
+        "RabbitMQTimeout",
+        "RabbitMQQueueDurable",
+        "RabbitMQQueueExclusive",
+        "RabbitMQQueueAutoDelete"
+    ]
 }

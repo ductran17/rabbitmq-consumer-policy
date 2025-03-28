@@ -25,13 +25,13 @@ import lombok.Setter;
 public class RabbitMQConfiguration implements PolicyConfiguration {
 
     @JsonProperty("AttributeQueueID")
-    private String attributeQueueID;
+    private String attributeQueueID = "subscription-id";
 
     @JsonProperty("CreateQueue")
-    private Boolean createQueue;
+    private Boolean createQueue = true;
 
     @JsonProperty("ConsumeQueue")
-    private Boolean consumeQueue;
+    private Boolean consumeQueue = true;
 
     @JsonProperty("RabbitMQHost")
     private String host;
@@ -46,14 +46,14 @@ public class RabbitMQConfiguration implements PolicyConfiguration {
     private String password;
 
     @JsonProperty("RabbitMQTimeout")
-    private Integer timeout;
+    private Integer timeout = 100000;
 
     @JsonProperty("RabbitMQQueueDurable")
-    private Boolean queueDurable;
+    private Boolean queueDurable = false;
 
     @JsonProperty("RabbitMQQueueExclusive")
-    private Boolean queueExclusive;
+    private Boolean queueExclusive = false;
 
     @JsonProperty("RabbitMQQueueAutoDelete")
-    private Boolean queueAutoDelete;
+    private Boolean queueAutoDelete = true;
 }
