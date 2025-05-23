@@ -75,6 +75,12 @@ You can configure the policy with the following options:
 
 .^|RabbitMQ Timeout
 ^.^|X
+.^|Timeout for RabbitMQ queue querying
+^.^|integer
+^.^|"5000"
+
+.^|RabbitMQ Time to Live
+^.^|X
 .^|Queue inactivity TTL (Delete this queue if it hasn’t been used for a given amount of time)
 ^.^|integer
 ^.^|"100000"

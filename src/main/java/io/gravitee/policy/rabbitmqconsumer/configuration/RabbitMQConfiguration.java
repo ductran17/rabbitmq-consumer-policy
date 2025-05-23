@@ -46,7 +46,10 @@ public class RabbitMQConfiguration implements PolicyConfiguration {
     private String password;
 
     @JsonProperty("RabbitMQTimeout")
-    private Integer timeout = 100000;
+    private Integer timeout = 5000;
+
+    @JsonProperty("RabbitMQTimeToLive")
+    private Integer timeToLive = 100000;
 
     @JsonProperty("RabbitMQQueueDurable")
     private Boolean queueDurable = false;

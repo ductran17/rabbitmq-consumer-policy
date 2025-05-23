@@ -53,7 +53,13 @@
         },
         "RabbitMQTimeout": {
             "title": "RabbitMQ Timeout",
-            "description": "Enter timout of RabbitMQ",
+            "description": "Enter timout for RabbitMQ queue querying",
+            "type": "integer",
+            "default": "5000"
+        },
+        "RabbitMQTimeToLive": {
+            "title": "RabbitMQ Time to Live",
+            "description": "Enter Time to Live of RabbitMQ Queue",
             "type": "integer",
             "default": "100000"
         },

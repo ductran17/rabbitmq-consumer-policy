@@ -47,6 +47,7 @@ public class RabbitMQConsumerPolicy implements Policy {
     private final RabbitMQConfiguration configuration;
     private final ConnectionFactory factory;
     private Integer timeOut;
+    private Integer timeToLive;
     Map<String, Boolean> queueConfig = new HashMap<>();
     private String attributeQueueID;
     private Boolean createQueue;
@@ -63,15 +64,18 @@ public class RabbitMQConsumerPolicy implements Policy {
         factory.setConnectionTimeout(5000);
         this.attributeQueueID = configuration.getAttributeQueueID();
         this.timeOut = configuration.getTimeout();
+        this.timeToLive = configuration.getTimeToLive();
         this.createQueue = configuration.getCreateQueue();
         this.consumeQueue = configuration.getConsumeQueue();
-        this.queueConfig = Map.of(
+        this.queueConfig =
+            Map.of(
                 "durable",
                 configuration.getQueueDurable(),
                 "exclusive",
                 configuration.getQueueExclusive(),
                 "autoDelete",
-                configuration.getQueueAutoDelete());
+                configuration.getQueueAutoDelete()
+            );
     }
 
     @Override
@@ -101,59 +105,91 @@ public class RabbitMQConsumerPolicy implements Policy {
                     try {
                         // Use queueDeclare to make sure queue exist (will create if queue not exist
                         channel.queueDeclare(
-                                subscriptionId,
-                                queueConfig.get("durable"), // durable
-                                queueConfig.get("exclusive"), // exclusive
-                                queueConfig.get("autoDelete"), // autoDelete
-                                Map.of("x-expires", this.timeOut));
+                            subscriptionId,
+                            queueConfig.get("durable"), // durable
+                            queueConfig.get("exclusive"), // exclusive
+                            queueConfig.get("autoDelete"), // autoDelete
+                            Map.of("x-expires", this.timeToLive)
+                        );
                     } catch (IOException e) {
                         emitter.onError(
-                                new RuntimeException("Queue declaration failed. Possibly due to mismatched parameters.",
-                                        e));
+                            new RuntimeException("Queue declaration failed. Possibly due to mismatched parameters.", e)
+                        );
                         return;
                     }
                 }
 
+                // Create a timeout handler
+                java.util.Timer timer = new java.util.Timer(true);
+                timer.schedule(
+                    new java.util.TimerTask() {
+                        @Override
+                        public void run() {
+                            try {
+                                log.info(
+                                    "Timeout reached for queue {} in {}ms, no message received",
+                                    subscriptionId,
+                                    timeOut
+                                );
+                                //No content
+                                ctx.response().status(204);
+                                // ctx.response().end(ctx);
+                                channel.queueDelete(subscriptionId);
+                                channel.close();
+                                connection.close();
+                                emitter.onComplete();
+                            } catch (Exception e) {
+                                log.error("Error during timeout cleanup", e);
+                                emitter.onError(e);
+                            }
+                        }
+                    },
+                    this.timeOut
+                );
+
                 // Consume messages and stop after receiving the first one
                 if (this.consumeQueue) {
                     channel.basicConsume(
-                            subscriptionId,
-                            true,
-                            (consumerTag, delivery) -> {
-                                try {
-                                    String message = new String(delivery.getBody(), StandardCharsets.UTF_8);
-                                    log.info("Received message: {}", message);
+                        subscriptionId,
+                        true,
+                        (consumerTag, delivery) -> {
+                            try {
+                                timer.cancel();
+                                String message = new String(delivery.getBody(), StandardCharsets.UTF_8);
+                                log.info("Received message: {}", message);
 
-                                    assignBodyContent(
-                                            ctx,
-                                            ctx.response().headers(),
-                                            Maybe.just(Buffer.buffer(message)),
-                                            false)
-                                            .subscribe(
-                                                    buffer -> {
-                                                        ctx.response().body(buffer);
-                                                        ctx.response().end(ctx);
+                                assignBodyContent(
+                                    ctx,
+                                    ctx.response().headers(),
+                                    Maybe.just(Buffer.buffer(message)),
+                                    false
+                                )
+                                    .subscribe(
+                                        buffer -> {
+                                            ctx.response().body(buffer);
+                                            // ctx.response().end(ctx);
 
-                                                        try {
-                                                            channel.basicCancel(consumerTag);
-                                                            channel.close();
-                                                            connection.close();
-                                                        } catch (Exception e) {
-                                                            log.warn("Failed to clean up consumer/channel", e);
-                                                        }
+                                            try {
+                                                channel.basicCancel(consumerTag);
+                                                channel.close();
+                                                connection.close();
+                                            } catch (Exception e) {
+                                                log.warn("Failed to clean up consumer/channel", e);
+                                            }
 
-                                                        emitter.onComplete();
-                                                    },
-                                                    error -> {
-                                                        log.error("Error assigning body content", error);
-                                                        emitter.onError(error);
-                                                    });
-                                } catch (Exception e) {
-                                    emitter.onError(e);
-                                }
-                            },
-                            consumerTag -> {
-                            });
+                                            emitter.onComplete();
+                                        },
+                                        error -> {
+                                            log.error("Error assigning body content", error);
+                                            emitter.onError(error);
+                                        }
+                                    );
+                            } catch (Exception e) {
+                                emitter.onError(e);
+                            }
+                        },
+                        consumerTag -> {}
+                    );
                 }
             } catch (Exception e) {
                 emitter.onError(e);
@@ -162,31 +198,34 @@ public class RabbitMQConsumerPolicy implements Policy {
     }
 
     private Maybe<Buffer> assignBodyContent(
-            HttpExecutionContext ctx,
-            HttpHeaders httpHeaders,
-            Maybe<Buffer> body,
-            boolean isRequest) {
+        HttpExecutionContext ctx,
+        HttpHeaders httpHeaders,
+        Maybe<Buffer> body,
+        boolean isRequest
+    ) {
         return body
-                .flatMap((Buffer content) -> {
-                    Writer writer = replaceContent(isRequest, ctx, content.toString());
-                    return Maybe.just(Buffer.buffer(writer.toString()));
+            .flatMap((Buffer content) -> {
+                Writer writer = replaceContent(isRequest, ctx, content.toString());
+                return Maybe.just(Buffer.buffer(writer.toString()));
+            })
+            .switchIfEmpty(
+                Maybe.fromCallable(() -> {
+                    // Fallback if body is empty (e.g., GET requests)
+                    Writer writer = replaceContent(isRequest, ctx, "");
+                    return Buffer.buffer(writer.toString());
                 })
-                .switchIfEmpty(
-                        Maybe.fromCallable(() -> {
-                            // Fallback if body is empty (e.g., GET requests)
-                            Writer writer = replaceContent(isRequest, ctx, "");
-                            return Buffer.buffer(writer.toString());
-                        }))
-                .doOnSuccess(buffer -> {
-                    // Automatically set Content-Length header
-                    httpHeaders.set(HttpHeaderNames.CONTENT_LENGTH, Integer.toString(buffer.length()));
-                })
-                .onErrorResumeNext(ioe -> {
-                    log.debug("Unable to assign body content", ioe);
-                    return ctx.interruptBodyWith(
-                            new ExecutionFailure(HttpStatusCode.INTERNAL_SERVER_ERROR_500)
-                                    .message("Unable to assign body content: " + ioe.getMessage()));
-                });
+            )
+            .doOnSuccess(buffer -> {
+                // Automatically set Content-Length header
+                httpHeaders.set(HttpHeaderNames.CONTENT_LENGTH, Integer.toString(buffer.length()));
+            })
+            .onErrorResumeNext(ioe -> {
+                log.debug("Unable to assign body content", ioe);
+                return ctx.interruptBodyWith(
+                    new ExecutionFailure(HttpStatusCode.INTERNAL_SERVER_ERROR_500)
+                        .message("Unable to assign body content: " + ioe.getMessage())
+                );
+            });
     }
 
     private Writer replaceContent(boolean isRequest, HttpExecutionContext ctx, String rawContent) {
