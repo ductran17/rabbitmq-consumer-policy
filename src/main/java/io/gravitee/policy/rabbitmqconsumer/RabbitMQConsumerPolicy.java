@@ -91,11 +91,15 @@ public class RabbitMQConsumerPolicy implements Policy {
 
     @Override
     public Completable onRequest(HttpExecutionContext ctx) {
-        return Completable.complete();
+        return consumeMessage(ctx);
     }
 
     @Override
     public Completable onResponse(HttpExecutionContext ctx) {
+        return consumeMessage(ctx);
+    }
+
+    private Completable consumeMessage(HttpExecutionContext ctx) {
         return Completable.create(emitter -> {
             String subscriptionId = ctx.getAttribute(this.attributeQueueID);
             if (subscriptionId == null) {
