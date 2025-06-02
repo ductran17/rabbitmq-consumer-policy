@@ -17,9 +17,17 @@ package io.gravitee.policy.rabbitmqconsumer.configuration;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.gravitee.policy.api.PolicyConfiguration;
+import java.util.ArrayList;
+import java.util.List;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
 @Getter
 @Setter
 public class RabbitMQConfiguration implements PolicyConfiguration {
@@ -59,4 +67,7 @@ public class RabbitMQConfiguration implements PolicyConfiguration {
 
     @JsonProperty("RabbitMQQueueAutoDelete")
     private Boolean queueAutoDelete = true;
+
+    @Builder.Default
+    private List<Variable> variables = new ArrayList<>();
 }

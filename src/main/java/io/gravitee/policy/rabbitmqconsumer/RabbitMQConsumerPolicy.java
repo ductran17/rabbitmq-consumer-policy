@@ -15,6 +15,9 @@
  */
 package io.gravitee.policy.rabbitmqconsumer;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jayway.jsonpath.JsonPath;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
@@ -31,11 +34,13 @@ import io.gravitee.gateway.reactive.api.el.EvaluableResponse;
 import io.gravitee.gateway.reactive.api.policy.Policy;
 import io.gravitee.policy.rabbitmqconsumer.configuration.RabbitMQConfiguration;
 import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.core.Maybe;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.Writer;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
@@ -52,6 +57,7 @@ public class RabbitMQConsumerPolicy implements Policy {
     private String attributeQueueID;
     private Boolean createQueue;
     private Boolean consumeQueue;
+    private static final String TEMPLATE_VARIABLE = "message";
 
     public RabbitMQConsumerPolicy(RabbitMQConfiguration configuration) {
         this.configuration = configuration;
@@ -133,7 +139,6 @@ public class RabbitMQConsumerPolicy implements Policy {
                                 );
                                 //No content
                                 ctx.response().status(204);
-                                // ctx.response().end(ctx);
                                 channel.queueDelete(subscriptionId);
                                 channel.close();
                                 connection.close();
@@ -147,7 +152,6 @@ public class RabbitMQConsumerPolicy implements Policy {
                     this.timeOut
                 );
 
-                // Consume messages and stop after receiving the first one
                 if (this.consumeQueue) {
                     channel.basicConsume(
                         subscriptionId,
@@ -158,16 +162,12 @@ public class RabbitMQConsumerPolicy implements Policy {
                                 String message = new String(delivery.getBody(), StandardCharsets.UTF_8);
                                 log.info("Received message: {}", message);
 
-                                assignBodyContent(
-                                    ctx,
-                                    ctx.response().headers(),
-                                    Maybe.just(Buffer.buffer(message)),
-                                    false
-                                )
+                                // Set the message in template context for evaluation
+                                ctx.getTemplateEngine().getTemplateContext().setVariable(TEMPLATE_VARIABLE, message);
+                                assign(ctx)
                                     .subscribe(
-                                        buffer -> {
-                                            ctx.response().body(buffer);
-                                            // ctx.response().end(ctx);
+                                        () -> {
+                                            ctx.response().body(Buffer.buffer(message));
 
                                             try {
                                                 channel.basicCancel(consumerTag);
@@ -180,7 +180,7 @@ public class RabbitMQConsumerPolicy implements Policy {
                                             emitter.onComplete();
                                         },
                                         error -> {
-                                            log.error("Error assigning body content", error);
+                                            log.error("Error assigning attributes", error);
                                             emitter.onError(error);
                                         }
                                     );
@@ -195,6 +195,43 @@ public class RabbitMQConsumerPolicy implements Policy {
                 emitter.onError(e);
             }
         });
+    }
+
+    private Completable assign(HttpExecutionContext ctx) {
+        return Flowable
+            .fromIterable(configuration.getVariables())
+            .flatMapCompletable(variable -> {
+                try {
+                    // Get the message from template context
+                    String message = ctx
+                        .getTemplateEngine()
+                        .getTemplateContext()
+                        .lookupVariable(TEMPLATE_VARIABLE)
+                        .toString();
+
+                    // Set the message in the template context for evaluation
+                    ctx.getTemplateEngine().getTemplateContext().setVariable("message", message);
+
+                    // Evaluate the expression
+                    return ctx
+                        .getTemplateEngine()
+                        .eval(variable.getValue(), String.class)
+                        .doOnSuccess(value -> {
+                            // Set the attribute in both the context and template context
+                            ctx.setAttribute(variable.getName(), value);
+                            ctx.getTemplateEngine().getTemplateContext().setVariable(variable.getName(), value);
+                            log.info("Assigned attribute {} = {}", variable.getName(), value);
+                        })
+                        .ignoreElement();
+                } catch (Exception e) {
+                    log.error("Error evaluating expression for variable {}: {}", variable.getName(), e.getMessage());
+                    return Completable.error(e);
+                }
+            })
+            .doOnComplete(() -> {
+                // Clean up template context
+                ctx.getTemplateEngine().getTemplateContext().setVariable(TEMPLATE_VARIABLE, null);
+            });
     }
 
     private Maybe<Buffer> assignBodyContent(

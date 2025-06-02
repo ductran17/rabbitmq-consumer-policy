@@ -80,6 +80,27 @@
             "description": "An auto-delete queue will be deleted when its last consumer is cancelled",
             "type": "boolean",
             "default": true
+        },
+        "variables": {
+            "type": "array",
+            "title": "Context variables",
+            "items": {
+                "type": "object",
+                "id": "urn:jsonschema:io:gravitee:policy:rabbitmqconsumer:configuration:Variable",
+                "title": "Variable",
+                "properties": {
+                    "name": {
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "value": {
+                        "title": "Value",
+                        "type": "string",
+                        "default": "{#jsonPath(#message, '$.field')}"
+                    }
+                }
+            },
+            "required": ["name", "value"]
         }
     },
     "required": [
